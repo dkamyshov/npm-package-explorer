@@ -2,6 +2,11 @@
 
 This software serves files directly from NPM packages. Useful in case of building a CDN or package documentation server.
 
+## Live demo
+
+- [Index page](https://npm-package-explorer.kamyshov.info/)
+- [React 17's README.md file](https://npm-package-explorer.kamyshov.info/show/react/17.0.0/README.md)
+
 ## Running (with Docker)
 
 The image name is [danilkamyshov/npm-package-explorer](https://hub.docker.com/r/danilkamyshov/npm-package-explorer).

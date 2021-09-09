@@ -10,7 +10,7 @@ Place the `npm-package-explorer.config.toml` (see `example.npm-package-explorer.
 
 ```
 sudo docker run \
-  -v /path/to/local/npm-package-explorer.config.toml:/usr/dist/npm-package-explorer.config.toml \
+  -v $(pwd)/example.npm-package-explorer.config.toml:/usr/dist/npm-package-explorer.config.toml \
   -p 8080:8080 \
   -it --rm \
   danilkamyshov/npm-package-explorer

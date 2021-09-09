@@ -34,6 +34,8 @@ name = "react"
 ## Enable or disable SSL certificate verification.
 ## Defaults to true.
 # ssl_verify = false
+## Index file. Defaults to "index.html".
+# index_file = "README.md"
 
 # [[packages]]
 # name = "react-dom"

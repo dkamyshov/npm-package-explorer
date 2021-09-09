@@ -32,12 +32,13 @@ fn get_unpacked_package_directory(unpacked_root_directory: &PathBuf) -> PathBuf 
 
 fn get_unpacked_file_path(
     unpacked_package_directory: &PathBuf,
+    package_config: &PackageConfig,
     request: &PackageFileRequest,
 ) -> PathBuf {
     let mut path = unpacked_package_directory.clone();
 
     let requested_file_name = if request.path == "" {
-        "index.html"
+        package_config.index_file.as_str()
     } else {
         &request.path
     };
@@ -76,7 +77,8 @@ pub async fn show_handler(
 
     let unpacked_root_directory = get_unpacked_root_directory(package_config, &request);
     let unpacked_package_directory = get_unpacked_package_directory(&unpacked_root_directory);
-    let unpacked_file_path = get_unpacked_file_path(&unpacked_package_directory, &request);
+    let unpacked_file_path =
+        get_unpacked_file_path(&unpacked_package_directory, package_config, &request);
 
     if !unpacked_package_directory.exists() {
         let info = app_data

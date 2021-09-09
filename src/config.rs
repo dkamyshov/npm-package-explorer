@@ -13,6 +13,10 @@ fn default_ssl_verify() -> bool {
     true
 }
 
+fn default_index_file() -> String {
+    String::from("index.html")
+}
+
 #[derive(Deserialize, Serialize, Debug)]
 pub struct Labels {
     pub title: String,
@@ -30,6 +34,8 @@ pub struct PackageConfig {
     pub access_token: Option<String>,
     #[serde(default = "default_ssl_verify")]
     pub ssl_verify: bool,
+    #[serde(default = "default_index_file")]
+    pub index_file: String,
 }
 
 #[derive(Deserialize, Debug)]

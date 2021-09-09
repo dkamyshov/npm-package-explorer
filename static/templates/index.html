@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>{{@root.labels.title}}</title>
+    <link href="./static/style.css" rel="stylesheet" />
+    <link rel="shortcut icon" type="image/x-icon" href="./static/favicon.ico" />
+    <meta charset="UTF-8" />
+    <script>
+      function handleSelectedPackageChange(name, index) {
+        window.history.replaceState(
+          name,
+          "",
+          index === 0 ? "/" : "/?package=" + name
+        );
+      }
+    </script>
+    <style>
+      .banner {
+        background: {{banner_gradient_left_color}};
+        background: linear-gradient(45deg, {{banner_gradient_left_color}} 0%, {{banner_gradient_right_color}} 100%);
+        color: {{banner_color}};
+      }
+    </style>
+  </head>
+
+  <body>
+    <section class="banner">{{@root.labels.banner}}</section>
+
+    {{#each packages}}
+    <style>
+      #__package_option_radio__{{clear_name}}:checked ~ #__package_option_content__{{clear_name}} {
+        display: block;
+      }
+
+      #__package_option_radio__{{clear_name}}:checked
+        ~ nav.package-list
+        #__package_option_item__{{clear_name}} {
+        border: 1px solid transparent;
+        border-bottom: 2px solid rgba(31, 62, 176, 1);
+        background-color: rgba(0, 55, 255, 0.158);
+      }
+    </style>
+
+    {{#if (eq ../selected_package_name name)}}
+    <input
+      class="selector"
+      type="radio"
+      name="selectedPackageName"
+      id="__package_option_radio__{{clear_name}}"
+      onchange="handleSelectedPackageChange('{{name}}', {{@index}});"
+      checked
+    />
+    {{else}}
+    <input
+      class="selector"
+      type="radio"
+      name="selectedPackageName"
+      id="__package_option_radio__{{clear_name}}"
+      onchange="handleSelectedPackageChange('{{name}}', {{@index}});"
+    />
+    {{/if}} {{/each}}
+
+    <nav class="package-list">
+      <ul>
+        {{#each packages}}
+        <li
+          class="package-list__item"
+          id="__package_option_item__{{clear_name}}"
+        >
+          <label
+            class="package-list__item__label"
+            for="__package_option_radio__{{clear_name}}"
+            >{{name}}&nbsp;<img src="/badge?package={{name}}"
+          /></label>
+        </li>
+        {{/each}}
+      </ul>
+    </nav>
+
+    {{#each packages}}
+    <div class="package" id="__package_option_content__{{clear_name}}">
+      <h1 class="package__name">{{name}}</h1>
+
+      <div class="package__list">
+        <div class="package__list__header">
+          <div>{{@root.labels.version}}</div>
+          <div class="package__list-header__divider"></div>
+          <div>{{@root.labels.published}}</div>
+        </div>
+        <div class="package__list__content">
+          {{#each versions}}
+          <div class="item">
+            <div class="item__version">
+              <a href="/show/{{../name}}/{{this.version}}/">
+                {{this.version}}
+              </a>
+            </div>
+            <div class="package__list-header__divider"></div>
+            <div class="item__published" title="{{this.time}}">
+              {{this.formatted_time}}
+            </div>
+          </div>
+          {{/each}}
+        </div>
+      </div>
+    </div>
+    {{/each}}
+  </body>
+</html>

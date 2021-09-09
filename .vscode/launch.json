@@ -1,0 +1,45 @@
+{
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug executable 'npm-package-explorer'",
+      "cargo": {
+        "args": [
+          "build",
+          "--bin=npm-package-explorer",
+          "--package=npm-package-explorer"
+        ],
+        "filter": {
+          "name": "npm-package-explorer",
+          "kind": "bin"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug unit tests in executable 'npm-package-explorer'",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--bin=npm-package-explorer",
+          "--package=npm-package-explorer"
+        ],
+        "filter": {
+          "name": "npm-package-explorer",
+          "kind": "bin"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    }
+  ]
+}

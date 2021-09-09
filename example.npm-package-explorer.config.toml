@@ -1,0 +1,37 @@
+# Language for the "[published] xxx ago" label.
+# Supported languages: en, ru
+timeago_language = "en"
+
+banner_gradient_left_color = "rgb(31, 62, 176)"
+banner_gradient_right_color = "rgb(12, 30, 96)"
+banner_color = "white"
+
+[labels]
+# Page title.
+title = "npm-package-explorer"
+# Bannel label (<h1 />).
+banner = "npm-package-explorer"
+# "Version" table caption.
+version = "Version"
+# "Published" table caption.
+published = "Published"
+
+# The list of "tracked" packages.
+[[packages]]
+# The "real" name of the package on the registry.
+name = "react"
+## The name by which the package is accessible on the package
+## explorer. Defaults to "[name]".
+# alias = "cool-package"
+## The registry to pull the package from.
+## Defaults to "https://registry.npmjs.org/".
+## Trailing slash is required!
+# registry = "https://my.private.registry.com/"
+## Access token for the registry.
+# access_token = "12345"
+## Enable or disable SSL certificate verification.
+## Defaults to true.
+# ssl_verify = false
+
+# [[packages]]
+# name = "react-dom"

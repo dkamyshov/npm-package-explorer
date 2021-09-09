@@ -34,6 +34,8 @@ async fn main() -> std::io::Result<()> {
         },
     });
 
+    let listen_address = app_data.config.listen_address.clone();
+
     HttpServer::new(move || {
         App::new()
             .wrap(Logger::default())
@@ -44,7 +46,7 @@ async fn main() -> std::io::Result<()> {
             .service(list_versions_handler)
             .service(Files::new("/static", "./static/files"))
     })
-    .bind("0.0.0.0:8080")?
+    .bind(listen_address)?
     .run()
     .await
 }

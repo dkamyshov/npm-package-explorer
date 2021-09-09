@@ -34,6 +34,7 @@ pub struct PackageConfig {
 
 #[derive(Deserialize, Debug)]
 pub struct Config {
+    pub listen_address: String,
     pub timeago_language: Option<String>,
     pub banner_gradient_left_color: String,
     pub banner_gradient_right_color: String,

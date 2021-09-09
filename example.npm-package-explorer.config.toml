@@ -1,3 +1,5 @@
+listen_address = "0.0.0.0:8080"
+
 # Language for the "[published] xxx ago" label.
 # Supported languages: en, ru
 timeago_language = "en"

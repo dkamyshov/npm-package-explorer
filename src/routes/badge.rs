@@ -8,6 +8,46 @@ use badgen::{badge, Color, Style};
 use derive_more::Display;
 use serde_derive::Deserialize;
 
+const FATAL_ERROR_BADGE: &'static str = r###"
+<svg
+  width="159.6"
+  height="20"
+  viewBox="0 0 1596 200"
+  xmlns="http://www.w3.org/2000/svg"
+  role="img"
+  aria-label="error: internal server error"
+>
+  <title>error: internal server error</title>
+  <linearGradient id="a" x2="0" y2="100%">
+    <stop offset="0" stop-opacity=".1" stop-color="#EEE" />
+    <stop offset="1" stop-opacity=".1" />
+  </linearGradient>
+  <mask id="m"><rect width="1596" height="200" rx="30" fill="#FFF" /></mask>
+  <g mask="url(#m)">
+    <rect width="374" height="200" fill="#555" />
+    <rect width="1222" height="200" fill="#E43" x="374" />
+    <rect width="1596" height="200" fill="url(#a)" />
+  </g>
+  <g
+    aria-hidden="true"
+    fill="#fff"
+    text-anchor="start"
+    font-family="Verdana,DejaVu Sans,sans-serif"
+    font-size="110"
+  >
+    <text x="60" y="148" textLength="274" fill="#000" opacity="0.25">
+      error
+    </text>
+    <text x="50" y="138" textLength="274">error</text>
+    <text x="429" y="148" textLength="1122" fill="#000" opacity="0.25">
+      internal server error
+    </text>
+    <text x="419" y="138" textLength="1122">internal server error</text>
+  </g>
+</svg>
+
+"###;
+
 #[derive(Deserialize, Debug)]
 pub struct QueryParams {
     package: Option<String>,
@@ -42,7 +82,8 @@ impl ResponseError for BadgeError {
             BadgeError::InternalServerError => "internal server error",
         };
 
-        let badge_content = render_badge("error", description, Color::Red).unwrap();
+        let badge_content = render_badge("error", description, Color::Red)
+            .unwrap_or(String::from(FATAL_ERROR_BADGE));
 
         HttpResponse::Ok()
             .content_type("image/svg+xml")

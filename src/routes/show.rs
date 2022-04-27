@@ -1,62 +1,23 @@
-use crate::common::AppData;
-use crate::config::PackageConfig;
+use crate::error::PackageTrackingError;
+use crate::npm_registry::DownloadManager;
 use crate::request::PackageFileRequest;
-use actix_files::NamedFile;
-use actix_web::{
-    error::{ErrorBadRequest, ErrorInternalServerError, ErrorNotFound},
-    get,
-    web::Data,
-    HttpRequest, HttpResponse, Result as ActixResult,
-};
+use crate::{common::AppData, error::NpmPackageServerError};
 use log::debug;
-use std::{fs::create_dir_all, path::PathBuf};
+use rouille::{extension_to_mime, Response};
+use std::sync::Arc;
+use std::{ffi::OsStr, fs::File, path::Path};
 
-fn get_unpacked_root_directory(config: &PackageConfig, request: &PackageFileRequest) -> PathBuf {
-    let mut path = PathBuf::new();
-
-    path.push(".");
-    path.push(".tmp");
-    path.push(config.key());
-    path.push(&request.version);
-
-    path
+fn get_extension_from_filename(filename: Option<&str>) -> Option<&str> {
+    filename
+        .map(|filename| Path::new(filename).extension().and_then(OsStr::to_str))
+        .flatten()
 }
 
-fn get_unpacked_package_directory(unpacked_root_directory: &PathBuf) -> PathBuf {
-    let mut path = unpacked_root_directory.clone();
-
-    path.push("package");
-
-    path
-}
-
-fn get_unpacked_file_path(
-    unpacked_package_directory: &PathBuf,
-    package_config: &PackageConfig,
-    request: &PackageFileRequest,
-) -> PathBuf {
-    let mut path = unpacked_package_directory.clone();
-
-    let requested_file_name = if request.path == "" {
-        package_config.index_file.as_str()
-    } else {
-        &request.path
-    };
-
-    path.push(requested_file_name);
-
-    path
-}
-
-#[get("/show/{tail:.*}")]
-pub async fn show_handler(
-    req: HttpRequest,
-    app_data: Data<AppData<'_>>,
-) -> ActixResult<HttpResponse> {
-    let path = req.match_info().query("tail").parse::<String>()?;
-    let request: PackageFileRequest = path
-        .parse()
-        .map_err(|_| ErrorBadRequest("failed to parse package request"))?;
+pub fn show_handler(
+    app_data: Arc<AppData>,
+    path: String,
+) -> Result<Response, NpmPackageServerError> {
+    let request: PackageFileRequest = path.parse()?;
 
     debug!("Client requested: {}", path);
 
@@ -65,48 +26,61 @@ pub async fn show_handler(
         target.push_str(&path);
         target.push_str("/");
 
-        return Ok(HttpResponse::MovedPermanently()
-            .header("location", target)
-            .finish());
+        return Ok(Response::redirect_301(target));
     }
 
     let package_config = app_data
         .config
         .get_package(&request.name)
-        .ok_or(ErrorNotFound("not found"))?;
+        .ok_or_else(|| PackageTrackingError::PackageIsNotTracked(request.name.clone()))?;
 
-    let unpacked_root_directory = get_unpacked_root_directory(package_config, &request);
-    let unpacked_package_directory = get_unpacked_package_directory(&unpacked_root_directory);
-    let unpacked_file_path =
-        get_unpacked_file_path(&unpacked_package_directory, package_config, &request);
+    let download_paths = DownloadManager::get_download_paths(package_config, &request);
 
-    if !unpacked_package_directory.exists() {
-        let info = app_data
-            .cache
-            .update(package_config)
-            .map_err(|_| ErrorInternalServerError("failed to update cache"))?;
-        let tarball_url = info
-            .manifest
-            .get_tarball_url(&request.version)
-            .ok_or(ErrorNotFound(
-                "the requested version was not found in the registry",
-            ))?;
-        create_dir_all(&unpacked_root_directory)?;
-        tarball_url
-            .download_and_unpack(&unpacked_root_directory, package_config)
-            .map_err(|_| ErrorInternalServerError("failed to download and unpack the package"))?;
+    if !download_paths.package_directory.exists() {
+        let info = app_data.manifest_repository.get_manifest(package_config)?;
+        let tarball_url = info.get_tarball_url(&request.version).ok_or_else(|| {
+            NpmPackageServerError::Registry(format!(
+                "the specified version \"{}\" does not exist in \"{}\"",
+                &request.version, info.registry_url
+            ))
+        })?;
+
+        app_data.download_manager.download(
+            package_config,
+            tarball_url,
+            download_paths.root_directory,
+        )?;
     }
 
-    if !unpacked_file_path.exists() {
-        let error_message = format!(
-            "The requested file ({}) was not found",
-            unpacked_file_path.to_str().ok_or(ErrorInternalServerError(
-                "failed to extract unpacked file path to UTF-8 string"
-            ))?
-        );
-
-        return Err(ErrorNotFound(error_message));
+    if !download_paths.requested_file_path.exists() {
+        return Err(NpmPackageServerError::NoSuchFile(request.path));
     }
 
-    NamedFile::open(unpacked_file_path)?.into_response(&req)
+    let str = download_paths
+        .requested_file_path
+        .to_str()
+        .ok_or_else(|| NpmPackageServerError::Generic(String::from("failed to convert path")))?
+        .to_owned();
+
+    let extension = get_extension_from_filename(Some(&str));
+
+    let mime = extension
+        .map(|extension| {
+            if extension == "md" {
+                return "text/markdown; charset=utf-8";
+            }
+
+            return extension_to_mime(extension);
+        })
+        .unwrap_or("text/html");
+
+    let used_mime = if mime == "application/octet-stream" {
+        "text/html"
+    } else {
+        mime
+    };
+
+    let file = File::open(download_paths.requested_file_path)?;
+
+    Ok(Response::from_file(used_mime, file))
 }

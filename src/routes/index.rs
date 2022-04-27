@@ -1,22 +1,14 @@
-use crate::common::AppData;
 use crate::config::Config;
-use crate::npm_registry::VersionInfoForTemplates;
-use actix_web::error::{ErrorInternalServerError, ErrorNotFound};
-use actix_web::web::{Data, Query};
-use actix_web::{get, HttpResponse, Result as ActixResult};
+use crate::error::PackageTrackingError;
+use crate::npm_registry::PackageManifest;
+use crate::{common::AppData, error::NpmPackageServerError};
 use chrono::Utc;
 use log::debug;
-use regex::Regex;
-use serde_derive::{Deserialize, Serialize};
+use rouille::Response;
+use serde_derive::Serialize;
 use std::ops::Sub;
 use std::sync::Arc;
 use timeago::{languages, Formatter, Language};
-use urlencoding::encode;
-
-#[derive(Deserialize, Debug)]
-pub struct QueryParams {
-    package: Option<String>,
-}
 
 #[derive(Serialize)]
 struct TemplateVersion {
@@ -32,12 +24,6 @@ struct TemplatePackage {
     versions: Vec<TemplateVersion>,
 }
 
-fn filter_string(source: &str) -> String {
-    let re: Regex = Regex::new(r"[^a-zA-Z0-9_]").unwrap();
-
-    re.replace_all(encode(source).as_ref(), "_").to_string()
-}
-
 fn get_language_by_iso639_1_code(iso639_1: &str) -> Box<dyn Language + Send + Sync + 'static> {
     match iso639_1 {
         "ru" => Box::new(languages::russian::Russian),
@@ -47,7 +33,7 @@ fn get_language_by_iso639_1_code(iso639_1: &str) -> Box<dyn Language + Send + Sy
 
 fn transform_version_info_for_templates(
     config: &Config,
-    source: Arc<Vec<VersionInfoForTemplates>>,
+    source: Arc<PackageManifest>,
 ) -> Vec<TemplateVersion> {
     let language = get_language_by_iso639_1_code(
         config
@@ -56,43 +42,40 @@ fn transform_version_info_for_templates(
             .unwrap_or(&String::from("en")),
     );
 
-    let f = Formatter::with_language(language);
+    let formatter = Formatter::with_language(language);
     let now = Utc::now();
 
     source
+        .versions
         .iter()
         .map(|version| {
-            let published = version
-                .published
-                .map_or(String::from("unknown"), |t| t.to_rfc3339());
+            let published = version.published.to_rfc3339();
 
-            let formatted_time = version.published.map_or(String::from("unknown"), |t| {
-                now.sub(t)
-                    .to_std()
-                    .map_or(String::from("unknown"), |d| f.convert(d))
-            });
+            let published_ago = now
+                .sub(version.published)
+                .to_std()
+                .map_or(String::from("unknown"), |d| formatter.convert(d));
 
             TemplateVersion {
-                version: version.version.clone(),
+                version: version.version.to_string(),
                 time: published.clone(),
-                formatted_time,
+                formatted_time: published_ago,
             }
         })
         .collect()
 }
 
-#[get("/")]
-pub async fn index_handler(
-    query: Query<QueryParams>,
-    app_data: Data<AppData<'_>>,
-) -> ActixResult<HttpResponse> {
+pub fn index_handler(
+    app_data: Arc<AppData>,
+    package_name: Option<String>,
+) -> Result<Response, NpmPackageServerError> {
     let first_package = app_data
         .config
         .get_first_package()
-        .ok_or(ErrorNotFound("there are 0 tracked packages"))?;
+        .ok_or(PackageTrackingError::NoTrackedPackages)?;
 
-    let selected_package_name = query
-        .package
+    // TODO: check if this package exists
+    let selected_package_name = package_name
         .clone()
         .unwrap_or(first_package.get_public_name().clone());
 
@@ -101,17 +84,19 @@ pub async fn index_handler(
         .packages
         .iter()
         .filter_map(|package_config| {
-            let manifest = app_data.cache.update(package_config).ok()?;
+            let manifest = app_data
+                .manifest_repository
+                .get_manifest(package_config)
+                .ok()?;
 
             let name = package_config.get_public_name();
-            let clear_name = filter_string(&package_config.key());
 
             Some(TemplatePackage {
                 name: name.clone(),
-                clear_name,
+                clear_name: package_config.identifier_safe_key(),
                 versions: transform_version_info_for_templates(
                     &app_data.config,
-                    Arc::clone(&manifest.manifest_for_templates),
+                    Arc::clone(&manifest),
                 ),
             })
         })
@@ -128,10 +113,7 @@ pub async fn index_handler(
         "banner_color": app_data.config.banner_color
     });
 
-    let body = app_data
-        .handlebars
-        .render("index", &data)
-        .map_err(|err| ErrorInternalServerError(err))?;
+    let body = app_data.handlebars.render("index", &data)?;
 
-    Ok(HttpResponse::Ok().body(body))
+    Ok(Response::html(body))
 }

@@ -1,6 +1,15 @@
 use std::str::FromStr;
+use thiserror::Error;
 
-use crate::error::NpmPackageServerError;
+#[derive(Error, Clone, Debug)]
+pub enum PackageFileRequestParsingError {
+    #[error("missing second part of scoped name: {0}")]
+    InvalidScopedName(String),
+    #[error("invalid name format: {0}")]
+    InvalidNameFormat(String),
+    #[error("missing version: {0}")]
+    MissingVersion(String),
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PackageFileRequest {
@@ -10,7 +19,7 @@ pub struct PackageFileRequest {
 }
 
 impl FromStr for PackageFileRequest {
-    type Err = NpmPackageServerError;
+    type Err = PackageFileRequestParsingError;
 
     fn from_str(s: &str) -> Result<Self, <Self as FromStr>::Err> {
         let mut result = PackageFileRequest {
@@ -32,16 +41,16 @@ impl FromStr for PackageFileRequest {
                             result.name.push_str(s);
                         }
                         None => {
-                            return Err(NpmPackageServerError::PackageFileRequestParseError(
-                                format!("invalid scoped name format: {}", s),
+                            return Err(PackageFileRequestParsingError::InvalidScopedName(
+                                s.to_string(),
                             ));
                         }
                     }
                 }
             }
             None => {
-                return Err(NpmPackageServerError::PackageFileRequestParseError(
-                    format!("invalid name format: {}", s),
+                return Err(PackageFileRequestParsingError::InvalidNameFormat(
+                    s.to_string(),
                 ));
             }
         }
@@ -50,11 +59,17 @@ impl FromStr for PackageFileRequest {
 
         match version {
             Some(version) => {
+                if version == "" {
+                    return Err(PackageFileRequestParsingError::MissingVersion(
+                        s.to_string(),
+                    ));
+                }
+
                 result.version.push_str(version);
             }
             None => {
-                return Err(NpmPackageServerError::PackageFileRequestParseError(
-                    format!("invalid name format (invalid or missing version): {}", s),
+                return Err(PackageFileRequestParsingError::MissingVersion(
+                    s.to_string(),
                 ));
             }
         }
@@ -149,5 +164,11 @@ mod tests {
                 path: "".into()
             }
         );
+    }
+
+    #[test]
+    fn test_missing_version() {
+        let result = "react/".parse::<PackageFileRequest>();
+        assert!(result.is_err());
     }
 }

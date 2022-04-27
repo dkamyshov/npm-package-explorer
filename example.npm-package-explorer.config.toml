@@ -35,7 +35,12 @@ name = "react"
 ## Defaults to true.
 # ssl_verify = false
 ## Index file. Defaults to "index.html".
-# index_file = "README.md"
+index_file = "README.md"
 
-# [[packages]]
-# name = "react-dom"
+[[packages]]
+name = "react-dom"
+index_file = "README.md"
+
+[[packages]]
+name = "effector"
+index_file = "README.md"

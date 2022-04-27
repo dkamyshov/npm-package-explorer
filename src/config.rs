@@ -1,9 +1,7 @@
-use crate::error::NpmPackageServerError;
-use regex::Regex;
+use crate::{common::filter_string, error::NpmPackageServerError};
 use serde_derive::{Deserialize, Serialize};
 use std::{fs::read_to_string, path::Path};
 use toml::from_str;
-use urlencoding::encode;
 
 fn default_registry() -> String {
     String::from("https://registry.npmjs.org/")
@@ -25,7 +23,7 @@ pub struct Labels {
     pub published: String,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct PackageConfig {
     pub name: String,
     pub alias: Option<String>,
@@ -62,9 +60,14 @@ impl PackageConfig {
         let mut result = String::new();
 
         result.push_str(&self.registry);
-        result.push_str("_");
         result.push_str(&self.name);
 
+        result
+    }
+
+    pub fn identifier_safe_key(&self) -> String {
+        let mut result = String::from("explorer_");
+        result.push_str(&self.key());
         filter_string(&result).to_lowercase()
     }
 }
@@ -89,10 +92,4 @@ impl Config {
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Config, NpmPackageServerError> {
         Ok(from_str::<Config>(read_to_string(path)?.as_ref())?)
     }
-}
-
-fn filter_string(source: &str) -> String {
-    let re: Regex = Regex::new(r"[^a-zA-Z0-9\-_.]").unwrap();
-
-    re.replace_all(encode(source).as_ref(), "_").to_string()
 }

@@ -1,22 +1,13 @@
-use crate::common::AppData;
-use actix_web::{
-    get,
-    web::{Data, Query},
-    HttpResponse, Result as ActixResult,
-};
+use std::sync::Arc;
+
+use crate::{common::AppData, error::NpmPackageServerError};
+use rouille::{Response, ResponseBody};
 use serde::Serialize;
-use serde_derive::Deserialize;
 
-#[derive(Deserialize)]
-pub struct QueryParams {
+pub fn list_versions_handler(
+    app_data: Arc<AppData>,
     jsonp: Option<String>,
-}
-
-#[get("/api/versions")]
-pub async fn list_versions_handler(
-    query: Query<QueryParams>,
-    app_data: Data<AppData<'_>>,
-) -> ActixResult<HttpResponse> {
+) -> Result<Response, NpmPackageServerError> {
     #[derive(Serialize)]
     struct VersionsListItem {
         name: String,
@@ -28,28 +19,32 @@ pub async fn list_versions_handler(
         .packages
         .iter()
         .filter_map(|package_config| {
-            let manifest = app_data.cache.update(package_config).ok()?;
+            let manifest = app_data
+                .manifest_repository
+                .get_manifest(package_config)
+                .ok()?;
 
             Some(VersionsListItem {
                 name: package_config.get_public_name().clone(),
                 versions: manifest
-                    .manifest_for_templates
+                    .versions
                     .iter()
-                    .map(|version| version.version.clone())
+                    .map(|version| version.version.to_string())
                     .collect(),
             })
         })
         .collect();
 
-    let serialized_content = serde_json::to_string(&result)?;
+    if let Some(callback_name) = jsonp {
+        let serialized_content = serde_json::to_string(&result)?;
 
-    if let Some(callback_name) = &query.jsonp {
-        Ok(HttpResponse::Ok()
-            .content_type("application/javascript; charset=utf-8")
-            .body(format!("{}({})", callback_name, serialized_content)))
+        Ok(Response {
+            status_code: 200,
+            headers: vec![("Content-Type".into(), "text/html; charset=utf-8".into())],
+            data: ResponseBody::from_string(format!("{}({})", callback_name, serialized_content)),
+            upgrade: None,
+        })
     } else {
-        Ok(HttpResponse::Ok()
-            .content_type("application/json")
-            .body(serialized_content))
+        Ok(Response::json(&result))
     }
 }

@@ -1,12 +1,10 @@
-use crate::common::AppData;
-use actix_web::http::header;
-use actix_web::web::{Data, Query};
-use actix_web::{error::ErrorInternalServerError, ResponseError};
-use actix_web::{get, http::StatusCode};
-use actix_web::{HttpResponse, Result as ActixResult};
+use crate::{
+    common::AppData,
+    error::{NpmPackageServerError, PackageTrackingError},
+};
 use badgen::{badge, Color, Style};
-use derive_more::Display;
-use serde_derive::Deserialize;
+use rouille::{Response, ResponseBody};
+use std::sync::Arc;
 
 const FATAL_ERROR_BADGE: &'static str = r###"
 <svg
@@ -48,89 +46,86 @@ const FATAL_ERROR_BADGE: &'static str = r###"
 
 "###;
 
-#[derive(Deserialize, Debug)]
-pub struct QueryParams {
-    package: Option<String>,
-}
+fn error_badge_response(description: &str, status_code: u16) -> Response {
+    let badge_content =
+        render_badge("error", description, Color::Red).unwrap_or(String::from(FATAL_ERROR_BADGE));
 
-#[derive(Display, Debug)]
-pub enum BadgeError {
-    InvalidPackageName,
-    PackageIsNotTracked,
-    InvalidVersion,
-    CacheUpdateFail,
-    InternalServerError,
-}
-
-impl ResponseError for BadgeError {
-    fn status_code(&self) -> StatusCode {
-        match *self {
-            BadgeError::InvalidPackageName => StatusCode::BAD_REQUEST,
-            BadgeError::PackageIsNotTracked => StatusCode::NOT_FOUND,
-            BadgeError::InvalidVersion => StatusCode::NOT_FOUND,
-            BadgeError::CacheUpdateFail => StatusCode::INTERNAL_SERVER_ERROR,
-            BadgeError::InternalServerError => StatusCode::INTERNAL_SERVER_ERROR,
-        }
-    }
-
-    fn error_response(&self) -> HttpResponse {
-        let description = match *self {
-            BadgeError::InvalidPackageName => "bad request",
-            BadgeError::PackageIsNotTracked => "package is not tracked",
-            BadgeError::CacheUpdateFail => "cache update failed",
-            BadgeError::InvalidVersion => "version is not found",
-            BadgeError::InternalServerError => "internal server error",
-        };
-
-        let badge_content = render_badge("error", description, Color::Red)
-            .unwrap_or(String::from(FATAL_ERROR_BADGE));
-
-        HttpResponse::Ok()
-            .content_type("image/svg+xml")
-            .body(badge_content)
+    Response {
+        status_code,
+        headers: vec![("Content-Type".into(), "image/svg+xml; charset=utf-8".into())],
+        data: ResponseBody::from_string(badge_content),
+        upgrade: None,
     }
 }
 
-fn render_badge(title: &str, description: &str, color: Color<'_>) -> ActixResult<String> {
+fn render_badge(
+    title: &str,
+    description: &str,
+    color: Color<'_>,
+) -> Result<String, NpmPackageServerError> {
     let mut style = Style::classic();
     style.background = color;
 
     badge(&style, description, Some(title))
-        .map_err(|_| ErrorInternalServerError("failed to render badge"))
+        .map_err(|error| NpmPackageServerError::BadgeRendering(error))
 }
 
-#[get("/badge")]
-pub async fn badge_handler(
-    query: Query<QueryParams>,
-    app_data: Data<AppData<'_>>,
-) -> ActixResult<HttpResponse, BadgeError> {
-    let package_name = query
-        .package
+fn badge_handler_inner(
+    app_data: Arc<AppData>,
+    package_name: Option<String>,
+) -> Result<Response, NpmPackageServerError> {
+    let package_name = package_name
         .clone()
-        .ok_or(BadgeError::InvalidPackageName)?;
+        .ok_or(NpmPackageServerError::PackageNameIsNotSpecified)?;
 
-    let package_config = app_data
-        .config
-        .get_package(&package_name)
-        .ok_or(BadgeError::PackageIsNotTracked)?;
+    let package_config = app_data.config.get_package(&package_name).ok_or(
+        PackageTrackingError::PackageIsNotTracked(package_name.to_string()),
+    )?;
 
-    let manifest = app_data
-        .cache
-        .update(package_config)
-        .map_err(|_| BadgeError::CacheUpdateFail)?;
+    let manifest = app_data.manifest_repository.get_manifest(package_config)?;
 
     let version = manifest
-        .manifest_for_templates
+        .versions
         .get(0)
-        .ok_or(BadgeError::InvalidVersion)?;
+        .ok_or(PackageTrackingError::NoVersions(package_name.to_string()))?;
 
-    let label = version.version.clone();
+    let label = version.version.to_string();
 
-    let body =
-        render_badge("npm", &label, Color::Green).map_err(|_| BadgeError::InternalServerError)?;
+    let body = render_badge("npm", &label, Color::Green)?;
 
-    Ok(HttpResponse::Ok()
-        .content_type("image/svg+xml")
-        .set_header(header::CACHE_CONTROL, "public, max-age=900")
-        .body(body))
+    Ok(Response {
+        status_code: 200,
+        headers: vec![
+            ("Content-Type".into(), "image/svg+xml; charset=utf-8".into()),
+            ("cache-control".into(), "public, max-age=900".into()),
+        ],
+        data: ResponseBody::from_string(body),
+        upgrade: None,
+    })
+}
+
+pub fn badge_handler(
+    app_data: Arc<AppData>,
+    package_name: Option<String>,
+) -> Result<Response, NpmPackageServerError> {
+    let result = badge_handler_inner(app_data, package_name);
+
+    match result {
+        Ok(response) => Ok(response),
+        Err(error) => Ok(match error {
+            NpmPackageServerError::PackageNameIsNotSpecified => {
+                error_badge_response("bad request", 400)
+            }
+            NpmPackageServerError::BadgeRendering(_) => {
+                error_badge_response("failed to render badge", 500)
+            }
+            NpmPackageServerError::ManifestFetchError(_) => {
+                error_badge_response("couldn't fetch manifest", 500)
+            }
+            NpmPackageServerError::PackageTrackingError(_) => {
+                error_badge_response("package is not tracked or there are no versions", 404)
+            }
+            _ => error_badge_response("internal server error", 500),
+        }),
+    }
 }

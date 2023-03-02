@@ -5,7 +5,10 @@ This software serves files directly from NPM packages. Useful in case of buildin
 ## Live demo
 
 - [Index page](https://npm-package-explorer.kamyshov.info/)
-- [React 17's README.md file](https://npm-package-explorer.kamyshov.info/show/react/17.0.0/README.md)
+- Example files:
+  - [react/18.0.0/](https://npm-package-explorer.kamyshov.info/show/react/18.0.0) (will show `README.md`, see `example.npm-package-explorer.config.toml/packages/index_file`)
+  - [react/18.0.0/README.md](https://npm-package-explorer.kamyshov.info/show/react/18.0.0/README.md)
+  - [react/18.0.0/cjs/react.production.min.js](https://npm-package-explorer.kamyshov.info/show/react/18.0.0/cjs/react.production.min.js)
 
 ## Running (with Docker)
 
